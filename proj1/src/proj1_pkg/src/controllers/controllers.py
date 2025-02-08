@@ -13,6 +13,7 @@ import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
+
 # Lab imports
 from utils.utils import *
 
@@ -283,22 +284,22 @@ class Controller:
         # the desired orientation to the actual orientation. We use
         # the corresponding angle as our metric. Note that perfect tracking
         # would mean that this "angle error" is always zero.
-        angles = []
-        for t in range(len(times)):
-            quat1 = target_workspace_quaternions[t]
-            quat2 = actual_workspace_quaternions[t]
-            theta = axis_angle(quat1, quat2)
-            angles.append(theta)
+        # angles = []
+        # for t in range(len(times)):
+        #     quat1 = target_workspace_quaternions[t]
+        #     quat2 = actual_workspace_quaternions[t]
+        #     theta = axis_angle(quat1, quat2)
+        #     angles.append(theta)
 
-        plt.figure()
-        plt.plot(times, angles)
-        plt.xlabel("Time (s)")
-        plt.ylabel("Error Angle of End Effector (rad)")
-        print("Close the plot window to continue")
-        plt.show()
+        # plt.figure()
+        # plt.plot(times, angles)
+        # plt.xlabel("Time (s)")
+        # plt.ylabel("Error Angle of End Effector (rad)")
+        # print("Close the plot window to continue")
+        # plt.show()
         
 
-    def execute_path(self, path, rate=200, timeout=None, log=False):
+    def execute_path(self, times, actual_positions, actual_velocities, target_positions, target_velocities, path, rate=200, timeout=None, log=False):
         """
         takes in a path and moves the baxter in order to follow the path.  
 
@@ -323,12 +324,6 @@ class Controller:
         """
 
         # For plotting
-        if log:
-            times = list()
-            actual_positions = list()
-            actual_velocities = list()
-            target_positions = list()
-            target_velocities = list()
 
         # For interpolation
         max_index = len(path.joint_trajectory.points)-1
@@ -337,6 +332,7 @@ class Controller:
         # For timing
         start_t = rospy.Time.now()
         r = rospy.Rate(rate)
+
 
         while not rospy.is_shutdown():
             # Find the time from start
@@ -360,14 +356,14 @@ class Controller:
             ) = self.interpolate_path(path, t, current_index)
 
             # For plotting
-            if log:
-                times.append(t)
-                actual_positions.append(current_position)
-                actual_velocities.append(current_velocity)
-                target_positions.append(target_position)
-                target_velocities.append(target_velocity)
+            times.append(t)
+            actual_positions.append(current_position)
+            actual_velocities.append(current_velocity)
+            target_positions.append(target_position)
+            target_velocities.append(target_velocity)
 
             # Run controller
+
             self.step_control(target_position, target_velocity, target_acceleration)
 
             # Sleep for a bit (to let robot move)
@@ -376,20 +372,11 @@ class Controller:
             if current_index >= max_index:
                 self.stop_moving()
                 break
-
-        if log:
-            self.plot_results(
-                times,
-                actual_positions, 
-                actual_velocities, 
-                target_positions, 
-                target_velocities
-            )
         return True
 
-    def follow_ar_tag(self, tag, rate=200, timeout=None, log=False):
+    def follow_ar_tag(self, path, tag, rate=200, timeout=None, log=False):
         """
-        takes in an AR tag number and follows it with the baxter's arm.  You 
+        takes in an AR tag number and follows it with the sawyer's arm.  You 
         should look at execute_path() for inspiration on how to write this. 
 
         Parameters
@@ -412,7 +399,27 @@ class Controller:
         bool
             whether the controller completes the path or not
         """
-        raise NotImplementedError
+        assert NotImplementedError
+        r = rospy.Rate(rate)
+
+        tfBuffer = tf2_ros.Buffer()
+        listener = tf2_ros.TransformListener(tfBuffer)
+        tag_positions = []
+
+        to_frame = 'ar_marker_{}'.format(tag)
+        try:
+            trans = tfBuffer.lookup_transform('base', to_frame, rospy.Time(0), t)
+        except Exception as e:
+            print(e)
+            print("Retrying ...")
+        tag_pos = [getattr(trans.transform.translation, dim) for dim in ('x', 'y', 'z')]
+        tag_pos = np.array(tag_pos)
+
+        self.execute_path()
+
+
+        while not rospy.is_shutdown():
+            pass
 
 
 class PDJointVelocityController(Controller):
@@ -461,6 +468,12 @@ class PDJointVelocityController(Controller):
         self._limb.set_joint_velocities(joint_array_to_dict(control_input, self._limb))
 
 class FeedforwardJointVelocityController(Controller):
+
+    def __init__(self, limb, kin):
+        self.limb = limb
+        self.kin = kin
+
+
     def step_control(self, target_position, target_velocity, target_acceleration):
         """
         Parameters

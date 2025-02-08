@@ -268,7 +268,7 @@ class CircularTrajectory(Trajectory):
         return np.hstack((vel_d, np.zeros(3)))
 
 class PolygonalTrajectory(Trajectory):
-    def __init__(self, start_position, points, total_time):
+    def __init__(self, points, total_time):
         """
         Remember to call the constructor of Trajectory.
         You may wish to reuse other trajectories previously defined in this file.
@@ -277,7 +277,6 @@ class PolygonalTrajectory(Trajectory):
         ????? You're going to have to fill these in how you see fit
         """
         Trajectory.__init__(self, total_time)
-        self.start_position = start_position
         self.points = points
 
     def target_pose(self, time):
@@ -298,14 +297,15 @@ class PolygonalTrajectory(Trajectory):
         7x' :obj:`numpy.ndarray`
             desired configuration in workspace coordinates of the end effector
         """
-        timeperpoint = self.total_time / (len(self.nxt) + 1.0)
-
+        timeperpoint = self.total_time / (len(self.points))
         curtrajectory = 0
-        for i in range(len(self.nxt)):
-            if time <= (i+1) * timeperpoint / 2 and time > i * timeperpoint:
+
+        for i in range(len(self.points)):
+            if time <= (i+1) * timeperpoint and time > i * timeperpoint:
                 curtrajectory = i
                 break
-        return self.nxt[curtrajectory].target_pose(time - curtrajectory * timeperpoint)
+        cur = LinearTrajectory(self.points[curtrajectory ], self.points[(curtrajectory + 1)%4], timeperpoint)
+        return cur.target_pose(time - curtrajectory * timeperpoint)
 
     def target_velocity(self, time):
         """
@@ -322,14 +322,15 @@ class PolygonalTrajectory(Trajectory):
         6x' :obj:`numpy.ndarray`
             desired body-frame velocity of the end effector
         """
-        timeperpoint = self.total_time / (len(self.nxt) + 1.0)
+        timeperpoint = self.total_time / (len(self.points))
 
         curtrajectory = 0
-        for i in range(len(self.nxt)):
-            if time <= (i+1) * timeperpoint / 2 and time > i * timeperpoint:
+        for i in range(len(self.points)):
+            if time <= (i+1) * timeperpoint and time > i * timeperpoint:
                 curtrajectory = i
                 break
-        return self.nxt[curtrajectory].target_velocity(time - curtrajectory * timeperpoint)
+        cur = LinearTrajectory(self.points[curtrajectory ], self.points[(curtrajectory + 1)%4], timeperpoint)
+        return cur.target_velocity(time - curtrajectory * timeperpoint)
 
 def define_trajectories(args):
     """ Define each type of trajectory with the appropriate parameters."""

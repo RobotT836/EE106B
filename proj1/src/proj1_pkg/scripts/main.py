@@ -11,6 +11,7 @@ import numpy as np
 import signal
 import roslaunch
 import rospkg
+import matplotlib as plt
 
 from paths.trajectories import LinearTrajectory, CircularTrajectory, PolygonalTrajectory
 from paths.paths import MotionPath
@@ -37,6 +38,7 @@ from sawyer_pykdl import sawyer_kinematics
 #  cd ~/ros_workspaces/proj1/src/proj1_pkg/scripts
 #  cd ../../..; catkin_make; source devel/setup.bash; cd src/proj1_pkg/scripts
 #  python main.py -task polygon -ar_marker 9 -c jointspace
+
 
 
 def tuck():
@@ -82,13 +84,13 @@ def lookup_tag(tag_number, t = rospy.Duration(10.0)):
     except Exception as e:
         print(e)
         print("Retrying ...")
-    assert trans is not None, "Failed to find transform from {} to {}".format('base', to_frame)
+    # assert trans is not None, "Failed to find transform from {} to {}".format('base', to_frame)
     tag_pos = [getattr(trans.transform.translation, dim) for dim in ('x', 'y', 'z')]
     return np.array(tag_pos)
 
 
 
-def get_trajectory(limb, kin, ik_solver, tag_pos, args, lin=[]):
+def get_trajectory(limb, kin, ik_solver, tag_pos, args):
     """
     Returns an appropriate robot trajectory for the specified task.  You should 
     be implementing the path functions in paths.py and call them here
@@ -129,7 +131,10 @@ def get_trajectory(limb, kin, ik_solver, tag_pos, args, lin=[]):
         trajectory = CircularTrajectory(target_pos, radius=0.1, total_time=15)
     elif task == 'polygon':
         #assert lin is not []
-        trajectory = PolygonalTrajectory(current_position, lin, 2)
+        target_pos = tag_pos[0]
+        target_pos[2] = current_position[2]
+        points = [[0,0,0], [.15,0, 0], [.15,.15, 0],[0, .15, 0]]
+        trajectory = PolygonalTrajectory( target_pos + points, 10)
 
     else:
         raise ValueError('task {} not recognized'.format(task))
@@ -207,6 +212,7 @@ def main():
     parser.add_argument('--log', action='store_true', help='plots controller performance')
     args = parser.parse_args()
 
+
     rospy.init_node('moveit_node')
     # this is used for sending commands (velocity, torque, etc) to the robot
     ik_solver = IK("base", "right_hand")
@@ -219,30 +225,7 @@ def main():
 
     #GET INITIAL TAG POS
     tag_pos = [lookup_tag(marker) for marker in args.ar_marker]
-
-    # tfBuffer = tf2_ros.Buffer()
-    # listener = tf2_ros.TransformListener(tfBuffer)
-
-    # try:
-    #     trans = tfBuffer.lookup_transform('base', 'right_hand', rospy.Time(0), rospy.Duration(10.0))
-    # except Exception as e:
-    #     print(e)
-    #     print("Failed to find initial transform ...")
-
-    # current_position = np.array([getattr(trans.transform.translation, dim) for dim in ('x', 'y', 'z')])
-    # target_pos = tag_pos[0]
-    # target_pos[2] = current_position[2]
-    # points = []
-    # nxt = []
-
-    # n = 0
-    # if args.task == 'polygon':
-    #     n = int(input('\nDefine number of sides: '))
-
-    #     for i in range(n):
-    #         points.append(np.array(target_pos + (0.1/(1 * np.sin(np.pi/n))) * np.array([np.cos(2*np.pi*i/n + np.pi/2), np.sin(2*np.pi*i/n + np.pi/2), 0])))
-    #     for i in range(n-1):
-    #         nxt.append(LinearTrajectory(points[i], points[i+1], 2))
+    orig_tag_pos = copy.deepcopy(tag_pos)
         
     
     # Get an appropriate RobotTrajectory for the task (circular, linear, or square)
@@ -303,19 +286,77 @@ def main():
             input('Press <Enter> to execute the trajectory using YOUR OWN controller')
         except KeyboardInterrupt:
             sys.exit()
-        # execute the path using your own controller.
-        while not rospy.is_shutdown():
+
+        times = list()
+        actual_positions = list()
+        actual_velocities = list()
+        target_positions = list()
+        target_velocities = list()
+
+
+            # execute the path using your own controller.
+        if args.task == 'polygon':
             done = controller.execute_path(
+                times, 
+                actual_positions,
+                actual_velocities,
+                target_positions,
+                target_velocities,
                 robot_trajectory, 
                 rate=args.rate, 
                 timeout=args.timeout, 
-                log=args.log,
+                log=args.log
             )
             ik_solver = IK("base", "right_hand")
             kin = sawyer_kinematics('right')
-            tag_pos = [lookup_tag(marker, rospy.Duration(2.0)) for marker in args.ar_marker]
+            robot_trajectory = get_trajectory(limb, kin, ik_solver, orig_tag_pos, args)
 
-            robot_trajectory = get_trajectory(limb, kin, ik_solver, tag_pos, args)
+            if args.log:
+                controller.plot_results(
+                    times,
+                    actual_positions, 
+                    actual_velocities, 
+                    target_positions, 
+                    target_velocities
+                )
+
+        else:
+
+            try:
+                while not rospy.is_shutdown():
+                    done = controller.execute_path(
+                        times, 
+                        actual_positions,
+                        actual_velocities,
+                        target_positions,
+                        target_velocities,
+                        robot_trajectory, 
+                        rate=args.rate, 
+                        timeout=args.timeout, 
+                        log=args.log,
+                    )
+                    ik_solver = IK("base", "right_hand")
+                    kin = sawyer_kinematics('right')
+                    
+                    tag_pos = [lookup_tag(marker, rospy.Duration(2.0)) for marker in args.ar_marker]
+
+                    robot_trajectory = get_trajectory(limb, kin, ik_solver, tag_pos, args)
+            except KeyboardInterrupt:
+                m = 0
+                for i in range(len(times)-1):
+                    if times[i] < times[i+1]:
+                        m += times[i]
+                    times[i] += m
+                times[-1] += m
+
+
+                controller.plot_results(
+                    times,
+                    actual_positions, 
+                    actual_velocities, 
+                    target_positions, 
+                    target_velocities
+                )
             
         if not done:
             print('Failed to move to position')
