@@ -11,7 +11,7 @@ import numpy as np
 import signal
 import roslaunch
 import rospkg
-import matplotlib as plt
+import matplotlib.pyplot as plt
 
 from paths.trajectories import LinearTrajectory, CircularTrajectory, PolygonalTrajectory
 from paths.paths import MotionPath
@@ -81,12 +81,13 @@ def lookup_tag(tag_number, t = rospy.Duration(10.0)):
 
     try:
         trans = tfBuffer.lookup_transform('base', to_frame, rospy.Time(0), t)
+        tag_pos = [getattr(trans.transform.translation, dim) for dim in ('x', 'y', 'z')]
+        return np.array(tag_pos)
     except Exception as e:
         print(e)
         print("Retrying ...")
-    # assert trans is not None, "Failed to find transform from {} to {}".format('base', to_frame)
-    tag_pos = [getattr(trans.transform.translation, dim) for dim in ('x', 'y', 'z')]
-    return np.array(tag_pos)
+        return None
+    
 
 
 
@@ -115,11 +116,11 @@ def get_trajectory(limb, kin, ik_solver, tag_pos, args):
 
     try:
         trans = tfBuffer.lookup_transform('base', 'right_hand', rospy.Time(0), rospy.Duration(10.0))
+        current_position = np.array([getattr(trans.transform.translation, dim) for dim in ('x', 'y', 'z')])
+        print("Current Position:", current_position)
     except Exception as e:
         print(e)
-
-    current_position = np.array([getattr(trans.transform.translation, dim) for dim in ('x', 'y', 'z')])
-    print("Current Position:", current_position)
+        return None
 
     if task == 'line':
         target_pos = tag_pos[0]
@@ -339,9 +340,8 @@ def main():
                     kin = sawyer_kinematics('right')
                     
                     tag_pos = [lookup_tag(marker, rospy.Duration(2.0)) for marker in args.ar_marker]
-
                     robot_trajectory = get_trajectory(limb, kin, ik_solver, tag_pos, args)
-            except KeyboardInterrupt:
+            except (KeyboardInterrupt, SystemExit, rospy.ROSException, rospy.ROSInterruptException):
                 m = 0
                 for i in range(len(times)-1):
                     if times[i] < times[i+1]:
@@ -357,6 +357,23 @@ def main():
                     target_positions, 
                     target_velocities
                 )
+                sys.exit(0)
+            m = 0
+            for i in range(len(times)-1):
+                if times[i] < times[i+1]:
+                    m += times[i]
+                times[i] += m
+            times[-1] += m
+
+
+            controller.plot_results(
+                times,
+                actual_positions, 
+                actual_velocities, 
+                target_positions, 
+                target_velocities
+            )
+            sys.exit(0)
             
         if not done:
             print('Failed to move to position')

@@ -249,7 +249,7 @@ class Controller:
                 plt.ylabel("Joint " + str(joint) + " Velocity Error")
                 plt.legend()
             print("Close the plot window to continue")
-            plt.show()
+            plt.show(block=True)
 
         else:
             # it's workspace
@@ -277,7 +277,7 @@ class Controller:
             plt.legend()
 
         print("Close the plot window to continue")
-        plt.show()
+        plt.show(block=True)
 
         # Plot orientation error. This is measured by considering the
         # axis angle representation of the rotation matrix mapping
@@ -470,8 +470,7 @@ class PDJointVelocityController(Controller):
 class FeedforwardJointVelocityController(Controller):
 
     def __init__(self, limb, kin):
-        self.limb = limb
-        self.kin = kin
+        Controller.__init__(self, limb, kin)
 
 
     def step_control(self, target_position, target_velocity, target_acceleration):
