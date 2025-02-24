@@ -241,6 +241,20 @@ class SinusoidPlanner():
             path.append([t, v1(t-t0), v2(t-t0)])
             t = t + dt
         return self.v_path_to_u_path(path, start_state, dt)
+    
+    def binSearch(self, start_state, goal_state, t0 = 0, dt = 0.01, delta_t = 2):
+        a2 = 0
+        delta_y = 0
+        omega = 2*np.pi / delta_t
+
+
+
+        start, end = 0, 10
+        a1 = (start + end) / 2.0
+        alphat = lambda l, t, phi, a2, a1: (1/l)*np.tan(phi + a2*np.cos(omega*t) + a1*np.sin(omega*t))
+        integrand = quad(alphat, 0, (2*np.pi/omega))
+        g = lambda alpha: alpha/np.sqrt(1-alpha**2)
+    
 
 
     def steer_y(self, start_state, goal_state, t0 = 0, dt = 0.01, delta_t = 2):
@@ -274,12 +288,7 @@ class SinusoidPlanner():
         omega = 2*np.pi / delta_t
 
         a2 = min(1, 0.5*self.phi_dist*omega)
-        alpha_fn = lambda t: start_state_v[3] + 
 
-        v1 = lambda
-        v2 = lambda
-
-        integrand = 
 
         path, t = [], t0
         while t < t0 + delta_t:

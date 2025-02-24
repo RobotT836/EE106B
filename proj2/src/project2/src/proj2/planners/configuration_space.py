@@ -264,7 +264,8 @@ class BicycleConfigurationSpace(ConfigurationSpace):
         """
         c1 and c2 should be numpy.ndarrays of size (4,)
         """
-        pass
+        
+        
 
     def sample_config(self, *args):
         """
