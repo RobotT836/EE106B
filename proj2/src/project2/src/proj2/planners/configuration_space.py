@@ -264,8 +264,8 @@ class BicycleConfigurationSpace(ConfigurationSpace):
         """
         c1 and c2 should be numpy.ndarrays of size (4,)
         """
-        
-        
+        theta_diff = abs(c1[2] - c2[2])
+        theta_dist = min(theta_diff, 2 * np.pi - theta_diff)
 
     def sample_config(self, *args):
         """
@@ -276,7 +276,9 @@ class BicycleConfigurationSpace(ConfigurationSpace):
         RRT implementation passes in the goal as an additional argument,
         which can be used to implement a goal-biasing heuristic.
         """
-        pass
+        p = np.random.uniform(0,1)
+        if p < 0.5:
+            return 
 
     def check_collision(self, c):
         """
@@ -333,4 +335,4 @@ class BicycleConfigurationSpace(ConfigurationSpace):
         This should return a cofiguration_space.Plan object.
         """
         pass
-    motion_prinms = 
+        motion_prinms = []
