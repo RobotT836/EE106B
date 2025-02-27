@@ -333,3 +333,4 @@ class BicycleConfigurationSpace(ConfigurationSpace):
         This should return a cofiguration_space.Plan object.
         """
         pass
+    motion_prinms = 
