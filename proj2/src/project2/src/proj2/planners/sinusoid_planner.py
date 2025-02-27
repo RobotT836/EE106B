@@ -241,20 +241,6 @@ class SinusoidPlanner():
             path.append([t, v1(t-t0), v2(t-t0)])
             t = t + dt
         return self.v_path_to_u_path(path, start_state, dt)
-    
-    def binSearch(self, start_state, goal_state, t0 = 0, dt = 0.01, delta_t = 2):
-        a2 = 0
-        delta_y = 0
-        omega = 2*np.pi / delta_t
-
-
-
-        start, end = 0, 10
-        a1 = (start + end) / 2.0
-        alphat = lambda l, t, phi, a2, a1: (1/l)*np.tan(phi + a2*np.cos(omega*t) + a1*np.sin(omega*t))
-        integrand = quad(alphat, 0, (2*np.pi/omega))
-        g = lambda alpha: alpha/np.sqrt(1-alpha**2)
-    
 
 
     def steer_y(self, start_state, goal_state, t0 = 0, dt = 0.01, delta_t = 2):
@@ -283,12 +269,47 @@ class SinusoidPlanner():
         """
         start_state_v = self.state2v(start_state)
         goal_state_v = self.state2v(goal_state)
-        delta_y = goal_state_v[3] - start_state_v[3]
 
+        #Constants
         omega = 2*np.pi / delta_t
+        g = lambda x: x/np.sqrt(1-x**2)
+        f = lambda phi: (1/self.l)*np.tan(phi)
+        phi_fn = lambda t: (a2/omega)*np.sin(omega*t) + start_state_v[1]
+        G = 0
+        done = False
+        start = 0
+        end = delta_t
+        a1 = 0
 
-        a2 = min(1, 0.5*self.phi_dist*omega)
+        #BINARY SEARCH
+        while not done:
+            #1. Guess a2, assume delta_y
+            delta_y = goal_state_v[3] - start_state_v[3]
+            a2 = min(1, 0.5*self.phi_dist*omega)
 
+            #2. Guess a1, guess alpha
+            a1 = (start + end) / 2.0
+
+            alpha_fn = lambda t: start_state_v[2] + quad(f((a2/2*omega)*np.sin(2*omega*t) + phi_fn(0))*a1*np.sin(omega), 0, t)[0]
+
+            #3. Compute Beta
+
+            B = (omega/np.pi) * quad(g(alpha_fn(t))*np.sin(omega*t), 0, delta_t)[0]
+
+            #4. Compute guess
+
+            G = a1 * (np.pi/omega) * B
+
+            #5. Update search bounds
+            if G < delta_y:
+                end = a1
+            elif G > delta_y:
+                start = a1
+            else:
+                done = True
+
+        v1 = lambda t: a1*np.sin(omega*(t))
+        v2 = lambda t: a2*np.cos(2*omega*(t))
 
         path, t = [], t0
         while t < t0 + delta_t:
