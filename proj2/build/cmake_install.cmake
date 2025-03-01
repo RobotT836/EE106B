@@ -131,7 +131,16 @@ endif()
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
   include("/home/cc/ee106b/sp25/class/ee106b-aar/ros_workspaces/proj2/build/gtest/cmake_install.cmake")
-  include("/home/cc/ee106b/sp25/class/ee106b-aar/ros_workspaces/proj2/build/project2/cmake_install.cmake")
+  include("/home/cc/ee106b/sp25/class/ee106b-aar/ros_workspaces/proj2/build/stdr_simulator/stdr_launchers/cmake_install.cmake")
+  include("/home/cc/ee106b/sp25/class/ee106b-aar/ros_workspaces/proj2/build/stdr_simulator/stdr_msgs/cmake_install.cmake")
+  include("/home/cc/ee106b/sp25/class/ee106b-aar/ros_workspaces/proj2/build/stdr_simulator/stdr_resources/cmake_install.cmake")
+  include("/home/cc/ee106b/sp25/class/ee106b-aar/ros_workspaces/proj2/build/stdr_simulator/stdr_simulator/cmake_install.cmake")
+  include("/home/cc/ee106b/sp25/class/ee106b-aar/ros_workspaces/proj2/build/stdr_simulator/stdr_parser/cmake_install.cmake")
+  include("/home/cc/ee106b/sp25/class/ee106b-aar/ros_workspaces/proj2/build/stdr_simulator/stdr_robot/cmake_install.cmake")
+  include("/home/cc/ee106b/sp25/class/ee106b-aar/ros_workspaces/proj2/build/stdr_simulator/stdr_samples/cmake_install.cmake")
+  include("/home/cc/ee106b/sp25/class/ee106b-aar/ros_workspaces/proj2/build/stdr_simulator/stdr_server/cmake_install.cmake")
+  include("/home/cc/ee106b/sp25/class/ee106b-aar/ros_workspaces/proj2/build/stdr_simulator/stdr_gui/cmake_install.cmake")
+  include("/home/cc/ee106b/sp25/class/ee106b-aar/ros_workspaces/proj2/build/proj2_pkg/cmake_install.cmake")
 
 endif()
 
