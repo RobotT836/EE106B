@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import odeint
 from contextlib import contextmanager
+import dubins
 
 class Plan(object):
     """Data structure to represent a motion plan. Stores plans in the form of
@@ -288,12 +289,15 @@ class BicycleConfigurationSpace(ConfigurationSpace):
         Returns true if a configuration c is in collision
         c should be a numpy.ndarray of size (4,)
         """
-        padding = 0
-        for obs in self.obstacles:
-            dist = np.linalg.norm((obs.x - c[0]), (obs.y - c[1]))
-            if dist - obs.r - self.robot_radius - padding > 0:
-                return False
-            else: return True
+        padding = 0.1
+        with expanded_obstacles(self.obstacles, padding):
+            for obs in self.obstacles:
+                print((obs[0] - c[0]), (obs[1] - c[1]))
+                dist = ((obs[0] - c[0])**2 + (obs[1] - c[1])**2)**0.5
+                if dist - obs[2] - self.robot_radius <= 0:
+                    return True
+        return False
+
 
     def check_path_collision(self, path):
         """
@@ -305,7 +309,7 @@ class BicycleConfigurationSpace(ConfigurationSpace):
         and the open loop inputs don't exceed input bounds.
         """
 
-        return any([self.check_collision(c) for c in path.positions])
+        return True if path is None else any([self.check_collision(c) for c in path.positions])
 
 
     def local_plan(self, c1, c2, dt=0.01):
@@ -344,47 +348,49 @@ class BicycleConfigurationSpace(ConfigurationSpace):
 
         This should return a cofiguration_space.Plan object.
         """
-        # Motion primitive parameters
-        duration = 1.0  # Duration of each primitive
-        v_options = [-0.5, 0.5]  # Forward/backward velocities
-        omega_options = [-0.5, 0, 0.5]  # Steering angles
-        
-        def bicycle_dynamics(state, t, v, omega):
-            """Bicycle model dynamics"""
-            x, y, theta, phi = state
-            dx = v * np.cos(theta)
-            dy = v * np.sin(theta) 
-            dtheta = (v / self.robot_length) * np.tan(phi)
-            dphi = omega
-            return [dx, dy, dtheta, dphi]
-        
-        # Generate motion primitives
-        best_dist = float('inf')
-        best_plan = None
-        
-        times = np.arange(0, duration, dt)
-        
-        # Try different combinations of v and omega
-        for v in v_options:
-            for omega in omega_options:
-                # Integrate dynamics forward
-                trajectory = odeint(bicycle_dynamics, c1, times, args=(v, omega))
+        # to implement this, we will use anything but the dubins library
+
+        start = (c1[0], c1[1], c1[2])
+        end = (c2[0], c2[1], c2[2])
+
+        try:
+            path = dubins.shortest_path(start, end, self.robot_length)
+            configurations, _ = path.sample_many(dt)
+            configurations = np.array(configurations)
+            
+            # Add steering angle to configurations
+            states = []
+            for state in configurations:
+                c = [state[0], state[1], state[2], c1[3]]  # Keep initial steering angle
+                if self.check_collision(c):
+                    return None
+                states.append(c)
+            states = np.array(states)
+            times = np.arange(0, len(states)) * dt
+            
+            # Calculate inputs (v, omega) from state differences
+            inputs = np.zeros((len(times), 2))
+            for i in range(len(states)-1):
+                # Calculate forward velocity from position change
+                dx = states[i+1][0] - states[i][0]
+                dy = states[i+1][1] - states[i][1]
+                v = np.sqrt(dx*dx + dy*dy) / dt
                 
-                # Calculate distance to goal from end of trajectory
-                final_config = trajectory[-1]
-                dist = self.distance(final_config, c2)
+                # Calculate steering rate from heading change
+                dphi = states[i+1][3] - states[i][3]
+                omega = dphi / dt
                 
-                # Update best plan if this primitive is better
-                if dist < best_dist:
-                    best_dist = dist
-                    inputs = np.array([[v, omega] for _ in times])
-                    best_plan = Plan(times, trajectory, inputs, dt=dt)
-        
-        if best_plan is None:
-            # Fallback plan - stay in place
+                inputs[i] = [v, omega]
+            
+            # Copy last input for final timestep
+            inputs[-1] = inputs[-2]
+            
+            return Plan(times, states, inputs, dt=dt)
+            
+        except Exception as e:
+            print(f"Failed to generate Dubins path: {e}")
+            # Fallback to stationary plan
             times = np.array([0, dt])
             positions = np.array([c1, c1])
             inputs = np.zeros((2, 2))
-            best_plan = Plan(times, positions, inputs, dt=dt)
-            
-        return best_plan
+            return Plan(times, positions, inputs, dt=dt)

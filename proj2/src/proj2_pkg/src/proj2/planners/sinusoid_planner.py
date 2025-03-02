@@ -272,7 +272,8 @@ class SinusoidPlanner():
 
         #Constants
         omega = 2*np.pi / delta_t
-        a2 = min(1, 0.5*self.phi_dist*omega)
+        #a2 = min(1, 0.5*self.phi_dist*omega)
+        a2 = 1.5
         G = 0
         start = -5.0
         end = 5.0
