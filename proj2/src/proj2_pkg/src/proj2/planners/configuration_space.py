@@ -348,48 +348,44 @@ class BicycleConfigurationSpace(ConfigurationSpace):
 
         This should return a cofiguration_space.Plan object.
         """
-        # to implement this, we will use anything but the dubins library
+        #dubins
 
-        start = (c1[0], c1[1], c1[2])
-        end = (c2[0], c2[1], c2[2])
+        start = (c1[0], c1[1], c1[2]) #start position
+        end = (c2[0], c2[1], c2[2]) #end position   
 
         try:
-            path = dubins.shortest_path(start, end, self.robot_length)
-            configurations, _ = path.sample_many(dt)
-            configurations = np.array(configurations)
+            path = dubins.shortest_path(start, end, self.robot_length) #find shortest path
+            configurations, _ = path.sample_many(dt) #sample path
+            configurations = np.array(configurations) # configuration contains (x, y, theta)
             
-            # Add steering angle to configurations
             states = []
-            for state in configurations:
-                c = [state[0], state[1], state[2], c1[3]]  # Keep initial steering angle
-                if self.check_collision(c):
+            for state in configurations: 
+                c = [state[0], state[1], state[2], state[2]]  # sets initial to given (x, y, theta) and phi to initial phi
+                if self.check_collision(c): # checks if configuration is in collision
                     return None
                 states.append(c)
             states = np.array(states)
             times = np.arange(0, len(states)) * dt
             
-            # Calculate inputs (v, omega) from state differences
             inputs = np.zeros((len(times), 2))
             for i in range(len(states)-1):
-                # Calculate forward velocity from position change
+                # phi = (states[i+1][2] - states[i][2]) / 2
+                # states[i][3] = phi
                 dx = states[i+1][0] - states[i][0]
                 dy = states[i+1][1] - states[i][1]
                 v = np.sqrt(dx*dx + dy*dy) / dt
                 
-                # Calculate steering rate from heading change
                 dphi = states[i+1][3] - states[i][3]
                 omega = dphi / dt
                 
                 inputs[i] = [v, omega]
             
-            # Copy last input for final timestep
             inputs[-1] = inputs[-2]
             
             return Plan(times, states, inputs, dt=dt)
             
         except Exception as e:
             print(f"Failed to generate Dubins path: {e}")
-            # Fallback to stationary plan
             times = np.array([0, dt])
             positions = np.array([c1, c1])
             inputs = np.zeros((2, 2))

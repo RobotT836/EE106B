@@ -84,11 +84,11 @@ if __name__ == '__main__':
     if args.planner == 'sin':
         planner = SinusoidPlanner(config)
         ## Edit the dt and delta_t arguments to your needs.
-        plan = planner.plan_to_pose(controller.state, goal, dt=0.01, delta_t=2.0)
+        plan = planner.plan_to_pose(controller.state, goal, dt=0.01, delta_t=2.0) #dt=0.01, delta_t=2.0
 
     elif args.planner == 'rrt':
         ## Edit the max_iter, expand_dist, dt and prefix_time_length arguments to your needs.
-        planner = RRTPlanner(config, max_iter=10000, expand_dist=0.8)
+        planner = RRTPlanner(config, max_iter=10000, expand_dist=0.8)  #defaults: max_iter=10000, expand_dist=0.8) dt=0.01, prefix_time_length=1
         plan = planner.plan_to_pose(controller.state, goal, dt=0.01, prefix_time_length=1)
 
     elif args.planner == 'opt':

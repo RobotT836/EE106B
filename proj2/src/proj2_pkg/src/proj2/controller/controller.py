@@ -53,6 +53,7 @@ class BicycleModelController(object):
         variable self.state. You can use this as your state measurement
         when writing your closed loop controller.
 
+
         Parameters
         ----------
             target_position : target position at the current step in
@@ -62,7 +63,28 @@ class BicycleModelController(object):
         Returns:
             None. It simply sends the computed command to the robot.
         """
-        self.cmd(open_loop_input)
+
+
+
+        k1 = 0.01   # Affects velocity
+        k2 = -0.01    #Affects steering
+        k3 = -0.0001    
+
+        x_e = (target_position[0] - self.state[0])*np.cos(self.state[2]) + (target_position[1] - self.state[1])*np.sin(self.state[2])
+        y_e = -(target_position[0] - self.state[0])*np.sin(self.state[2]) + (target_position[1] - self.state[1])*np.cos(self.state[2])
+        theta_e = target_position[2] - self.state[2]
+        
+        theta_e = target_position[2] - self.state[2]
+
+        v_r = open_loop_input[0]*np.cos(theta_e) + k1*x_e
+        w = open_loop_input[1] + open_loop_input[0]*(k2*y_e + k3*np.sin(theta_e))
+
+        self.cmd([v_r, w])
+
+
+
+
+        #self.cmd(open_loop_input)
 
 
     def cmd(self, msg):

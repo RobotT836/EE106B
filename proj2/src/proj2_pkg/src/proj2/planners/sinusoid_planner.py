@@ -272,19 +272,18 @@ class SinusoidPlanner():
 
         #Constants
         omega = 2*np.pi / delta_t
-        #a2 = min(1, 0.5*self.phi_dist*omega)
-        a2 = 1.5
+        a2 = 3.0
         G = 0
         start = -5.0
         end = 5.0
-        a1 = 0
+
         g = lambda x: x/np.sqrt(1-x**2)
         f = lambda phi: (1/self.l)*np.tan(phi)
         phi_fn = lambda t: (a2/omega)*np.sin(omega*t) + start_state_v[1]
 
 
         e = 0.01
-        
+        a1 = 0.0
         #Initial Guess
         delta_y = goal_state_v[3] - start_state_v[3]
 
