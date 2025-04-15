@@ -197,7 +197,7 @@
                     <geom mesh="l6_4" material="black" class="visual"/>
                     <geom mesh="l6_5" material="black" class="visual"/>
                     <geom class="eef_collision" size="0.045 0.02"/>
-                    <site name="attachment site" pos="0 0 0.11" quat="0 1 0 1"/>
+                    <site name="attachment_site" pos="0 0 0.11" quat="0 1 0 1"/>
                   </body>
                 </body>
               </body>
