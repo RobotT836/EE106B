@@ -51,6 +51,37 @@ class LevenbergMarquardtIK:
             are possible 
         """
         #YOUR CODE HERE
-        self.data.qpos
+        self.data.qpos = self.physics.data.qpos.copy()
+        mujoco.mj_forward(self.model, self.data)
+        current_pose = self.data.body(body_ids).xpos
+        error = np.subtract(target_positions, current_pose)
+
+        while (np.linalg.norm(error) >= self.tol):
+            #calculate jacobian
+            # jac = []
+            for i in range(target_positions.shape[1]):
+                mujoco.mj_jac(self.model, self.data, self.jacp, self.jacr, target_positions[:, i], body_ids[i])
+                #calculate delta of joint q
+                # jac.append(self.jacp)
+
+                n = self.jacp.shape[1]
+                I = np.identity(n)
+                product = self.jacp.T @ self.jacp + self.damping * I
+            
+                if np.isclose(np.linalg.det(product), 0):
+                    j_inv = np.linalg.pinv(product) @ self.jacp.T
+                else:
+                    j_inv = np.linalg.inv(product) @ self.jacp.T
+                
+                delta_q = j_inv @ error
+                #compute next step
+                self.data.qpos += self.step_size * delta_q
+                #check limits
+                clip_to_valid_state(self.physics, self.data.qpos) 
+                #compute forward kinematics
+
+            mujoco.mj_forward(self.model, self.data) 
+            #calculate new error
+            error = np.subtract(target_positions[i], self.data.body(body_ids).xpos)
 
 
