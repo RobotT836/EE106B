@@ -52,7 +52,7 @@ class LevenbergMarquardtIK:
         """
         #YOUR CODE HERE
         self.data.qpos = self.physics.data.qpos.copy()
-        mujoco.mj_forward(self.model, self.data)
+        mj.mj_forward(self.model, self.data)
         current_pose = self.data.body(body_ids).xpos
         error = np.subtract(target_positions, current_pose)
 
@@ -60,7 +60,7 @@ class LevenbergMarquardtIK:
             #calculate jacobian
             # jac = []
             for i in range(target_positions.shape[1]):
-                mujoco.mj_jac(self.model, self.data, self.jacp, self.jacr, target_positions[:, i], body_ids[i])
+                mj.mj_jac(self.model, self.data, self.jacp, self.jacr, target_positions[:, i], body_ids[i])
                 #calculate delta of joint q
                 # jac.append(self.jacp)
 
@@ -80,7 +80,7 @@ class LevenbergMarquardtIK:
                 clip_to_valid_state(self.physics, self.data.qpos) 
                 #compute forward kinematics
 
-            mujoco.mj_forward(self.model, self.data) 
+            mj.mj_forward(self.model, self.data) 
             #calculate new error
             error = np.subtract(target_positions[i], self.data.body(body_ids).xpos)
 
