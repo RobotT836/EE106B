@@ -23,6 +23,13 @@ class AllegroHandEnv:
         finger positions in workspace coordinates
         """
         #YOUR CODE HERE
+        positions = []
+        for body in body_names:
+            body_id = self.physics.model.body(body).id
+            pos = self.physics.data.xpos[body_id]
+            positions.append(pos)
+        return np.array(positions)
+
 
     def get_contact_normals(self, contact: mj._structs._MjContactList):
         """
@@ -34,6 +41,12 @@ class AllegroHandEnv:
             -Get normals for all the geoms in contact with the ball, not just the fingertips
         """
         #YOUR CODE HERE
+        norms = []
+        for i in range(contact.num):
+            c = contact[i]
+            norm = c.frame[:3]
+            norms.append(norm)
+        return np.array(norms)
 
 class AllegroHandEnvSphere(AllegroHandEnv):
     def __init__(self, physics: dm_control.mjcf.physics.Physics, 

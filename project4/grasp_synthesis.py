@@ -32,6 +32,18 @@ def synthesize_grasp(env: grasp_synthesis.AllegroHandEnv,
     New joint angles after contact and force closure adjustment
     """
     #YOUR CODE HERE
+    for i in range(max_iters):
+        env.set_configuration(q_h_init)
+        num_contacts = env.physics.data.ncon
+
+        # Check if the fingers are in contact with the object
+        in_contact = num_contacts > 0
+
+        # Calculate the objective function value and gradient
+        grad = numeric_gradient(joint_space_objective, q_h_init, env, fingertip_names, in_contact)
+
+        #Update
+        q_h_init -= lr * grad
 
 def joint_space_objective(env: grasp_synthesis.AllegroHandEnv, 
                           q_h: np.array,
@@ -62,6 +74,16 @@ def joint_space_objective(env: grasp_synthesis.AllegroHandEnv,
     """
     env.set_configuration(q_h)
     #YOUR CODE HERE
+    pos = env.get_contact_positions()
+    d = env.sphere_surface_distance()
+    if not in_contact:
+        return beta * d
+    norms = env.get_contact_normals(env.physics.data.contact)
+    FCs = [build_friction_cones(norm, friction_coeff, num_friction_cone_approx) for norm in norms]
+    G = build_grasp_matrix(pos, FCs)
+    FC_loss = optimize_necessary_condition(G, env)
+
+    return FC_loss + beta * d
 
 
 def numeric_gradient(function: types.FunctionType, 
@@ -113,6 +135,18 @@ def build_friction_cones(normal: np.array, mu=0.5, num_approx=4):
     as vectors
     """
     #YOUR CODE HERE
+    norm = normal / np.linalg.norm(normal)
+
+    FC_vectors = []
+    for i in range(num_approx):
+        theta = 2 * np.pi * i / num_approx
+        ortho = np.random.randn(3)
+        ortho -= ortho.dot(norm) * norm
+        ortho = ortho / np.linalg.norm(ortho)
+        vec = np.cos(np.arctan(mu)) * norm + np.sin(np.arctan(mu)) * (np.cos(theta) * ortho + np.sin(theta) * np.cross(norm, ortho))
+        FC_vectors.append(vec)
+    return FC_vectors
+
 
 
 def build_grasp_matrix(positions: np.array, friction_cones: list, origin=np.zeros(3)):
@@ -128,7 +162,16 @@ def build_grasp_matrix(positions: np.array, friction_cones: list, origin=np.zero
     Return a 2D numpy array G with shape (6, sum_of_all_cone_directions).
     """
     #YOUR CODE HERE
+    grasp = []
+    for pos, cones in zip(positions, friction_cones):
+        rel = pos - origin
 
+        for vec in cones:
+            T = np.cross(rel, vec)
+            wrench = np.hstack([vec, T])
+            grasp.append(wrench)
+
+    return np.array(grasp).T
 
 def optimize_necessary_condition(G: np.array, env: grasp_synthesis.AllegroHandEnv):
     """
@@ -145,11 +188,11 @@ def optimize_necessary_condition(G: np.array, env: grasp_synthesis.AllegroHandEn
     Hint: use scipy.optimize.minimize
     """
     #YOUR CODE HERE
-    def objective():
-        pass
+    def objective(x):
+        return np.linalg.norm(G @ x)
 
-    x0 = ...
-    bounds = ...
+    x0 = np.zeros(G.shape[1])
+    bounds = [(0, None) for _ in range(G.shape[1])]
 
     res = minimize(objective, x0, method='SLSQP', bounds=bounds)
 
@@ -175,3 +218,24 @@ def optimize_sufficient_condition(G: np.array, K=20):
         -For the optimization method, do method='highs'
     """
     #YOUR CODE HERE
+
+    vecs = np.random.randn(6, K)
+    unitvecs /= np.linalg.norm(vecs, axis=0)
+
+    Qval = 9999999
+
+    for i in range(K):
+        c = np.zeros(G.shape[1] + 1)
+        c[-1] = -1
+
+        A_eq = np.hstack([G, unitvecs[:, i:i+1]])
+        b_eq = np.zeros(6)
+
+        bounds = [(0, None) for _ in range(G.shape[1])] + [(None, None)]
+
+        sol = linprog(c, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
+
+        if sol.success:
+            Qval = min(Qval, -sol.fun)
+
+    return Qval
