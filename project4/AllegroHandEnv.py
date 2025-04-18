@@ -42,7 +42,7 @@ class AllegroHandEnv:
         """
         #YOUR CODE HERE
         norms = []
-        for i in range(contact.num):
+        for i in range(len(contact)):
             c = contact[i]
             norm = c.frame[:3]
             norms.append(norm)

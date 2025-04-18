@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.optimize import linprog, minimize
 import AllegroHandEnv
+from AllegroHandEnv import AllegroHandEnvSphere
 import dm_control
 import mujoco as mj
 import grasp_synthesis
@@ -32,26 +33,38 @@ def synthesize_grasp(env: grasp_synthesis.AllegroHandEnv,
     New joint angles after contact and force closure adjustment
     """
     #YOUR CODE HERE
-    for i in range(max_iters):
-        env.set_configuration(q_h_init)
-        num_contacts = env.physics.data.ncon
 
-        # Check if the fingers are in contact with the object
-        in_contact = num_contacts > 0
+    i = 0
+    q = q_h_init
+    made_contact = False
+    while i < max_iters:
+        distances = []
+        for f in fingertip_names:
+            pos = env.physics.data.xpos[env.physics.model.name2id(f, 'body')].copy()
+            d = env.sphere_surface_distance(pos, env.sphere_center, env.sphere_radius)
+            distances.append(d)
+            #print(f"{f}: distance to ball surface = {d}")
+        made_contact = all(abs(d) < 1e-2 for d in distances)
+        grad = numeric_gradient(joint_space_objective, q, env, fingertip_names, made_contact)
+        q_new = q - lr * grad
+        
+        improvement = joint_space_objective(env, q, fingertip_names, made_contact) - joint_space_objective(env, q_new, fingertip_names, made_contact)
+        #print(improvement)
+        if improvement > 0:
+            q = q_new
+            if improvement < 1e-6:
+                break
+        i += 1
+    return q
 
-        # Calculate the objective function value and gradient
-        grad = numeric_gradient(joint_space_objective, q_h_init, env, fingertip_names, in_contact)
-
-        #Update
-        q_h_init -= lr * grad
-
-def joint_space_objective(env: grasp_synthesis.AllegroHandEnv, 
+def joint_space_objective(env: grasp_synthesis.AllegroHandEnvSphere, 
                           q_h: np.array,
                           fingertip_names: list[str], 
                           in_contact: bool, 
                           beta=10.0, 
                           friction_coeff=0.5, 
-                          num_friction_cone_approx=4):
+                          num_friction_cone_approx=4,
+                          Qp_thresh=1e-2):
     """
     This function minimizes an objective such that the distance from the origin
     in wrench space as well as distance from fingers to object surface is minimized.
@@ -74,16 +87,32 @@ def joint_space_objective(env: grasp_synthesis.AllegroHandEnv,
     """
     env.set_configuration(q_h)
     #YOUR CODE HERE
-    pos = env.get_contact_positions()
-    d = env.sphere_surface_distance()
+    beta = 10
+    finger_ids = [env.physics.model.name2id(name, 'body') for name in fingertip_names]
+    pos = env.physics.data.xpos[finger_ids].copy()
+    
+    d = np.sum(max(0, env.sphere_surface_distance(p, env.sphere_center, env.sphere_radius)**2) for p in pos)
+    #print(d)
+
     if not in_contact:
         return beta * d
-    norms = env.get_contact_normals(env.physics.data.contact)
-    FCs = [build_friction_cones(norm, friction_coeff, num_friction_cone_approx) for norm in norms]
-    G = build_grasp_matrix(pos, FCs)
-    FC_loss = optimize_necessary_condition(G, env)
+    else:
+        norms = env.get_contact_normals(env.physics.data.contact)
+        FC = build_friction_cones(norms, friction_coeff, num_friction_cone_approx)
+        
+        G = build_grasp_matrix(env.physics.data.contact.pos, FC)
 
-    return FC_loss + beta * d
+        # print("G shape:", G.shape)
+        # print("Any NaN in G?", np.any(np.isnan(G)))
+        # print("Any inf in G?", np.any(np.isinf(G)))
+        # print("norms shape:", norms.shape)
+        # print("FC length:", len(FC))
+
+        fc_loss = optimize_necessary_condition(G, env, beta, d)
+        if fc_loss < Qp_thresh:
+            fc_loss = optimize_sufficient_condition(G)
+        # print("Force closure loss:", fc_loss)
+        return fc_loss + (beta * d)
 
 
 def numeric_gradient(function: types.FunctionType, 
@@ -108,12 +137,12 @@ def numeric_gradient(function: types.FunctionType,
     ------
     Approximate gradient of the inputted function
     """
-    baseline = function(q_h, env, fingertip_names, in_contact)
+    baseline = function(env, q_h, fingertip_names, in_contact)
     grad = np.zeros_like(q_h)
     for i in range(len(q_h)):
         q_h_pert = q_h.copy()
         q_h_pert[i] += eps
-        val_pert = function(q_h_pert, env, fingertip_names, in_contact)
+        val_pert = function(env, q_h_pert, fingertip_names, in_contact)
         grad[i] = (val_pert - baseline) / eps
     return grad
 
@@ -135,17 +164,26 @@ def build_friction_cones(normal: np.array, mu=0.5, num_approx=4):
     as vectors
     """
     #YOUR CODE HERE
-    norm = normal / np.linalg.norm(normal)
 
-    FC_vectors = []
-    for i in range(num_approx):
-        theta = 2 * np.pi * i / num_approx
-        ortho = np.random.randn(3)
-        ortho -= ortho.dot(norm) * norm
-        ortho = ortho / np.linalg.norm(ortho)
-        vec = np.cos(np.arctan(mu)) * norm + np.sin(np.arctan(mu)) * (np.cos(theta) * ortho + np.sin(theta) * np.cross(norm, ortho))
-        FC_vectors.append(vec)
-    return FC_vectors
+    FCs =[]
+    for n in normal:
+        norm = n / np.linalg.norm(n)
+        FC_vectors = []
+        for i in range(num_approx):
+            theta = 2 * np.pi * i / num_approx
+            ortho = np.random.randn(3)
+            ortho -= ortho.dot(norm) * norm
+            ortho = ortho / np.linalg.norm(ortho)
+            vec = (
+                np.cos(np.arctan(mu)) * norm +
+                np.sin(np.arctan(mu)) * (
+                    np.cos(theta) * ortho +
+                    np.sin(theta) * np.cross(norm, ortho)
+                )
+            )
+            FC_vectors.append(vec)
+        FCs.append(FC_vectors)
+    return FCs
 
 
 
@@ -173,7 +211,7 @@ def build_grasp_matrix(positions: np.array, friction_cones: list, origin=np.zero
 
     return np.array(grasp).T
 
-def optimize_necessary_condition(G: np.array, env: grasp_synthesis.AllegroHandEnv):
+def optimize_necessary_condition(G: np.array, env: grasp_synthesis.AllegroHandEnv, beta: float, D: float):
     """
     Returns the result of the L2 optimization on the distance from wrench origin to the
     wrench space of G
@@ -188,8 +226,8 @@ def optimize_necessary_condition(G: np.array, env: grasp_synthesis.AllegroHandEn
     Hint: use scipy.optimize.minimize
     """
     #YOUR CODE HERE
-    def objective(x):
-        return np.linalg.norm(G @ x)
+    def objective(a):
+        return np.linalg.norm(G @ a) + beta * D
 
     x0 = np.zeros(G.shape[1])
     bounds = [(0, None) for _ in range(G.shape[1])]
@@ -220,9 +258,9 @@ def optimize_sufficient_condition(G: np.array, K=20):
     #YOUR CODE HERE
 
     vecs = np.random.randn(6, K)
-    unitvecs /= np.linalg.norm(vecs, axis=0)
+    unitvecs = vecs / np.linalg.norm(vecs, axis=0)
 
-    Qval = 9999999
+    Qval = np.inf
 
     for i in range(K):
         c = np.zeros(G.shape[1] + 1)

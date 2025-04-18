@@ -75,7 +75,7 @@ class LevenbergMarquardtIK:
                 ##  error = target - cur
         
                 pos_error = target_positions[:, i] - self.physics.data.xpos[body_ids[i]]
-                quat_error = quaternion_error_naive(self.data.xquat[body_ids[i]], target_orientations[:, i])
+                quat_error = quaternion_error_naive(target_orientations[:, i], self.data.xquat[body_ids[i]])
                 # print(np.array(pos_error.shape), np.array(quat_error.shape))
                 all_error = np.hstack((pos_error, quat_error))
                 error = np.hstack((error, all_error))
