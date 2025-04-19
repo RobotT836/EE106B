@@ -45,6 +45,7 @@ def synthesize_grasp(env: grasp_synthesis.AllegroHandEnv,
             distances.append(d)
         made_contact = all(abs(d) < 1e-2 for d in distances)
         grad = numeric_gradient(joint_space_objective, q, env, fingertip_names, made_contact)
+        # print(grad)
         q_new = q - lr * grad
         
         improvement = joint_space_objective(env, q, fingertip_names, made_contact) - joint_space_objective(env, q_new, fingertip_names, made_contact)
@@ -111,21 +112,21 @@ def joint_space_objective(env: grasp_synthesis.AllegroHandEnvSphere,
 
         # positions = np.array(positions)
         positions = env.get_contact_positions(fingertip_names)
-        print(positions.shape)
-        print(positions[0])
+        # print(positions.shape)
+        # print(positions[0])
         
         G = build_grasp_matrix(positions, FC)
 
-        print("G shape:", G.shape)
+        # print("G shape:", G.shape)
         # print("Any NaN in G?", np.any(np.isnan(G)))
         # print("Any inf in G?", np.any(np.isinf(G)))
-        print("norms shape:", norms.shape)
-        print("FC length:", len(FC))
+        # print("norms shape:", norms.shape)
+        # print("FC length:", len(FC))
 
         fc_loss = optimize_necessary_condition(G, env, beta, d)
         if fc_loss < Qp_thresh:
             fc_loss = optimize_sufficient_condition(G)
-        print("Force closure loss:", fc_loss)
+        # print("Force closure loss:", fc_loss)
         return fc_loss + (beta * d)
 
 

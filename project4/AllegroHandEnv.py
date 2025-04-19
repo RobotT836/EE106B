@@ -44,7 +44,7 @@ class AllegroHandEnv:
         """
         #YOUR CODE HERE
         ball_id = self.physics.model.geom('ball/ball_geom').id
-        print(ball_id)
+        # print(ball_id)
 
         norms = []
         for i in range(len(contact)):
