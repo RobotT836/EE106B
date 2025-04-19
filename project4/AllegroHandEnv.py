@@ -16,6 +16,8 @@ class AllegroHandEnv:
         self.physics.data.qpos[self.q_h_slice] = q_h
         self.physics.forward()
 
+
+
     def get_contact_positions(self, body_names: list[str]):
         """
         Input: list of the names in the XML of the bodies that are in contact
@@ -42,6 +44,7 @@ class AllegroHandEnv:
         """
         #YOUR CODE HERE
         norms = []
+        print(len(contact))
         for i in range(len(contact)):
             c = contact[i]
             norm = c.frame[:3]

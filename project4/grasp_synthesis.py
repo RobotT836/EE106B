@@ -43,13 +43,11 @@ def synthesize_grasp(env: grasp_synthesis.AllegroHandEnv,
             pos = env.physics.data.xpos[env.physics.model.name2id(f, 'body')].copy()
             d = env.sphere_surface_distance(pos, env.sphere_center, env.sphere_radius)
             distances.append(d)
-            #print(f"{f}: distance to ball surface = {d}")
         made_contact = all(abs(d) < 1e-2 for d in distances)
         grad = numeric_gradient(joint_space_objective, q, env, fingertip_names, made_contact)
         q_new = q - lr * grad
         
         improvement = joint_space_objective(env, q, fingertip_names, made_contact) - joint_space_objective(env, q_new, fingertip_names, made_contact)
-        #print(improvement)
         if improvement > 0:
             q = q_new
             if improvement < 1e-6:
@@ -64,7 +62,7 @@ def joint_space_objective(env: grasp_synthesis.AllegroHandEnvSphere,
                           beta=10.0, 
                           friction_coeff=0.5, 
                           num_friction_cone_approx=4,
-                          Qp_thresh=1e-2):
+                          Qp_thresh=1e-5):
     """
     This function minimizes an objective such that the distance from the origin
     in wrench space as well as distance from fingers to object surface is minimized.
@@ -89,6 +87,8 @@ def joint_space_objective(env: grasp_synthesis.AllegroHandEnvSphere,
     #YOUR CODE HERE
     beta = 10
     finger_ids = [env.physics.model.name2id(name, 'body') for name in fingertip_names]
+    fingertip_names = np.array(['sawyer/allegro_right/ff_tip_rubber', 'sawyer/allegro_right/mf_tip_rubber', 'sawyer/allegro_right/rf_tip_rubber', 'sawyer/allegro_right/th_tip_rubber'])
+
     pos = env.physics.data.xpos[finger_ids].copy()
     
     d = np.sum(max(0, env.sphere_surface_distance(p, env.sphere_center, env.sphere_radius)**2) for p in pos)
@@ -97,21 +97,35 @@ def joint_space_objective(env: grasp_synthesis.AllegroHandEnvSphere,
     if not in_contact:
         return beta * d
     else:
-        norms = env.get_contact_normals(env.physics.data.contact)
+        norms = env.get_contact_normals(env.physics.data.contact[1:])
         FC = build_friction_cones(norms, friction_coeff, num_friction_cone_approx)
-        
-        G = build_grasp_matrix(env.physics.data.contact.pos, FC)
 
-        # print("G shape:", G.shape)
+        # positions = []
+        # for i in range(4):
+        #     contact = env.physics.data.contact[i]
+        #     print(f"Finger ids: {finger_ids}")
+        #     print("0 ", contact.geom[0])
+        #     print("1 ", contact.geom[1])
+        #     if contact.geom[0] in finger_ids or contact.geom[1] in finger_ids:
+        #         positions.append(c.pos.copy())
+
+        # positions = np.array(positions)
+        positions = env.get_contact_positions(fingertip_names)
+        print(positions.shape)
+        print(positions[0])
+        
+        G = build_grasp_matrix(positions, FC)
+
+        print("G shape:", G.shape)
         # print("Any NaN in G?", np.any(np.isnan(G)))
         # print("Any inf in G?", np.any(np.isinf(G)))
-        # print("norms shape:", norms.shape)
-        # print("FC length:", len(FC))
+        print("norms shape:", norms.shape)
+        print("FC length:", len(FC))
 
         fc_loss = optimize_necessary_condition(G, env, beta, d)
         if fc_loss < Qp_thresh:
             fc_loss = optimize_sufficient_condition(G)
-        # print("Force closure loss:", fc_loss)
+        print("Force closure loss:", fc_loss)
         return fc_loss + (beta * d)
 
 
