@@ -43,12 +43,15 @@ class AllegroHandEnv:
             -Get normals for all the geoms in contact with the ball, not just the fingertips
         """
         #YOUR CODE HERE
+        ball_id = self.physics.model.geom('ball/ball_geom').id
+        print(ball_id)
+
         norms = []
-        print(len(contact))
         for i in range(len(contact)):
             c = contact[i]
-            norm = c.frame[:3]
-            norms.append(norm)
+            if c.geom[0] == ball_id or c.geom[1] == ball_id:
+                norm = c.frame[:3]
+                norms.append(norm)
         return np.array(norms)
 
 class AllegroHandEnvSphere(AllegroHandEnv):
