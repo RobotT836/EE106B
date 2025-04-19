@@ -52,7 +52,7 @@ class LevenbergMarquardtIK:
         """
         #YOUR CODE HERE
         self.physics.data.qpos = self.physics.data.qpos.copy()
-        mj.mj_forward(self.model.ptr, self.data.ptr) #self.physics.forward() # We used 
+        mj.mj_forward(self.model.ptr, self.data.ptr)
         current_pose = np.array([self.physics.data.xpos[bid] for bid in body_ids])
         error = np.subtract(target_positions, current_pose)
 
@@ -65,28 +65,21 @@ class LevenbergMarquardtIK:
 
             for i in range(np.array(target_positions).shape[0]):
                 ## calculate the jacobian
-                # mj.mj_jacBody(self.physics.model.ptr, self.physics.data.ptr, self.jacp, self.jacr, body_ids[i])
                 mj.mj_jac(self.model.ptr, self.data.ptr, self.jacp, self.jacr, target_positions[i, :], body_ids[i])
-                #print(self.jacp.shape, self.jacr.shape)
+
                 #calculate delta of joint q
                 jac_all = np.vstack((self.jacp, self.jacr))
                 jac = np.vstack((jac, jac_all))
                 ##calc position and quat error
-                ##  error = target - cur
-        
+
                 pos_error = target_positions[i, :] - self.physics.data.xpos[body_ids[i]]
                 quat_error = quaternion_error_naive(self.physics.data.xquat[body_ids[i]], target_orientations[i, :])
-                # print(np.array(pos_error.shape), np.array(quat_error.shape))
                 all_error = np.hstack((pos_error, quat_error))
                 error = np.hstack((error, all_error))
                 
 
             error = error[1:]
-            # print(jac[:4, :])
             jac = jac[1:, :]
-            # print(jac[:4, :])
-            # print(error.shape)
-            # print(jac.shape)
             # 30x29 jacobian after all 4 fingers and palm, thus 6x29 after one finger/palm and 3x29 per jacobian translation/rotation
             # 24x1 for error
             n = jac.shape[1]
@@ -98,8 +91,6 @@ class LevenbergMarquardtIK:
             else:
                 j_inv = np.linalg.inv(product) @ jac.T
             
-            # print(j_inv.shape)
-            # print(error.shape)
             delta_q = j_inv @ error
             #compute next step
             self.physics.data.qpos[1:] += self.step_size * delta_q
@@ -107,7 +98,7 @@ class LevenbergMarquardtIK:
             q = clip_to_valid_state(self.physics, self.physics.data.qpos)
             self.physics.data.qpos[:] = q
                 
-            mj.mj_forward(self.model.ptr, self.data.ptr) #self.physics.forward() # We used 
+            mj.mj_forward(self.model.ptr, self.data.ptr) #self.physics.forward()
             self.max_steps -= 1
             #calculate new error
             
