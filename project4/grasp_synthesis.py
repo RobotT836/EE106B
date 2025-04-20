@@ -7,6 +7,8 @@ import mujoco as mj
 import grasp_synthesis
 import types
 
+import matplotlib.pyplot as plt
+
 """
 Note: this code gives a suggested structure for implementing grasp synthesis.
 You may decide to follow it or not. 
@@ -37,6 +39,7 @@ def synthesize_grasp(env: grasp_synthesis.AllegroHandEnv,
     i = 0
     q = q_h_init
     made_contact = False
+    loss = []
     while i < max_iters:
         distances = []
         for f in fingertip_names:
@@ -46,13 +49,25 @@ def synthesize_grasp(env: grasp_synthesis.AllegroHandEnv,
         made_contact = all(abs(d) < 1e-2 for d in distances)
         grad = numeric_gradient(joint_space_objective, q, env, fingertip_names, made_contact)
         q_new = q - lr * grad
+
+        newjs = joint_space_objective(env, q_new, fingertip_names, made_contact)
+        oldjs = joint_space_objective(env, q, fingertip_names, made_contact)
+
+        #plotting stuff
+        loss.append(oldjs)
         
-        improvement = joint_space_objective(env, q, fingertip_names, made_contact) - joint_space_objective(env, q_new, fingertip_names, made_contact)
+        improvement = oldjs - newjs
         if improvement > 0:
             q = q_new
             if improvement < 1e-6:
                 break
         i += 1
+
+    #Graphing stuff
+    # plt.plot(list(range(len(loss))), loss)
+    # plt.xlabel("Timestep")
+    # plt.ylabel("Objective Loss")
+    # plt.show()
     return q
 
 def joint_space_objective(env: grasp_synthesis.AllegroHandEnvSphere, 
@@ -90,25 +105,28 @@ def joint_space_objective(env: grasp_synthesis.AllegroHandEnvSphere,
     fingertip_names = np.array(['sawyer/allegro_right/ff_tip_rubber', 'sawyer/allegro_right/mf_tip_rubber', 'sawyer/allegro_right/rf_tip_rubber', 'sawyer/allegro_right/th_tip_rubber'])
 
     pos = env.physics.data.xpos[finger_ids].copy()
+
+    ret = None
     
     d = np.sum(max(0, env.sphere_surface_distance(p, env.sphere_center, env.sphere_radius)**2) for p in pos)
     if not in_contact:
-        return beta * d
+        ret = beta * d
     else:
+        #build friction cones
         norms = env.get_contact_normals(env.physics.data.contact[1:])
         FC = build_friction_cones(norms, friction_coeff, num_friction_cone_approx)
 
-
+        #build grasp matrix
         positions = env.get_contact_positions(fingertip_names)
-        
         G = build_grasp_matrix(positions, FC)
 
-        print(G.shape)
-
+        #compute loss
         fc_loss = optimize_necessary_condition(G, env, beta, d)
         if fc_loss < Qp_thresh:
             fc_loss = optimize_sufficient_condition(G)
-        return fc_loss + (beta * d)
+        ret = fc_loss + (beta * d)
+    return ret
+    
 
 
 def numeric_gradient(function: types.FunctionType, 
@@ -163,20 +181,16 @@ def build_friction_cones(normal: np.array, mu=0.5, num_approx=4):
 
     FCs =[]
     for n in normal:
+        #normalize
         norm = n / np.linalg.norm(n)
         FC_vectors = []
         for i in range(num_approx):
             theta = 2 * np.pi * i / num_approx
+            #get random cone side vec
             ortho = np.random.randn(3)
             ortho -= ortho.dot(norm) * norm
             ortho = ortho / np.linalg.norm(ortho)
-            vec = (
-                np.cos(np.arctan(mu)) * norm +
-                np.sin(np.arctan(mu)) * (
-                    np.cos(theta) * ortho +
-                    np.sin(theta) * np.cross(norm, ortho)
-                )
-            )
+            vec = (np.cos(np.arctan(mu)) * norm + np.sin(np.arctan(mu)) * (np.cos(theta) * ortho +np.sin(theta) * np.cross(norm, ortho)))
             FC_vectors.append(vec)
         FCs.append(FC_vectors)
     return FCs
@@ -230,7 +244,10 @@ def optimize_necessary_condition(G: np.array, env: grasp_synthesis.AllegroHandEn
 
     res = minimize(objective, x0, method='SLSQP', bounds=bounds)
 
-    return res.fun
+    Qplus = res.fun
+    print("Q+ Value: ", Qplus)
+
+    return Qplus
 
 
 def optimize_sufficient_condition(G: np.array, K=20):
@@ -256,7 +273,7 @@ def optimize_sufficient_condition(G: np.array, K=20):
     vecs = np.random.randn(6, K)
     unitvecs = vecs / np.linalg.norm(vecs, axis=0)
 
-    Qval = np.inf
+    Qmin = np.inf
 
     for i in range(K):
         c = np.zeros(G.shape[1] + 1)
@@ -270,6 +287,7 @@ def optimize_sufficient_condition(G: np.array, K=20):
         sol = linprog(c, A_eq=A_eq, b_eq=b_eq, bounds=bounds, method='highs')
 
         if sol.success:
-            Qval = min(Qval, -sol.fun)
+            Qmin = min(Qmin, -sol.fun)
 
-    return Qval
+    # print("Q- value: ", Qmin)
+    return Qmin
